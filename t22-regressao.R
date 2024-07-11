@@ -1,4 +1,4 @@
-setwd("C:/Users/Jordhan/Desktop/POS/Trabalho IAA008 - Equipe 22")
+setwd("E:/dev/MachineLearningR")
 
 library(caret)
 library(Metrics)
@@ -7,57 +7,96 @@ library(Metrics)
 set.seed(202462)
 
 # Bases
-veiculos <- read.csv("6 - Veiculos - Dados.csv")
-veiculos$a <- NULL
-diabetes <- read.csv("10 - Diabetes - Dados.csv")
-diabetes$num <- NULL
+admissao <- read.csv("9 - Admissao - Dados.csv")
+admissao$num <- NULL
+biomassa <- read.csv("5 - Biomassa - Dados.csv")
 
 print_division <- function() {
   print("---------------------------------")
 }
 
-r2 <- function(predito, observado) {
-  return(1 - (sum((predito - observado) ^ 2) /
-                sum((observado - mean(observado)) ^ 2)))
+r2 <- function(observed, pred) {
+  return(1 - (sum((pred - observed) ^ 2) /
+                sum((pred - mean(observed)) ^ 2)))
 }
 
-regressao_knn <- function(data, target_col) {
-  # Divisao 80/20
-  ran <- sample(1:nrow(data), 0.8 * nrow(data))
-  treino <- data[ran, ]
-  teste <- data[-ran, ]
+syx <- function(observed, pred) {
+  n <- length(observed)
+  ssres <- sum((observed - pred) ^ 2)
+  res <- sqrt(ssres / (n - 2))
+  return(res)
+}
 
-  # Criação da formula dinamica
-  formula <- reformulate(".", response = target_col)
-
-  # Grid com valores de K
-  tune_grid <- expand.grid(k = (1:10))
-  knn <- train(formula, data = treino, method = "knn", tuneGrid = tune_grid)
-  print_division()
-  print("KNN:")
-  print(knn)
-  print_division()
-  predict_knn <- predict(knn, teste)
-
-  # COLOCAR AQUI QUAL COLUNA
-  observado <- teste[, ncol(teste)]
-
+avaliacao <- function(observed, pred) {
   # Métricas
-  val_rmse <- rmse(observado, predict_knn)
-  val_r2 <- r2(predict_knn, observado)
-
-  print("RMSE:")
-  print(val_rmse)
-  print_division()
+  val_r2 <- r2(observed, pred)
+  val_syx <- syx(observed, pred)
+  val_pearson <- cor(observed, pred)
+  val_mae <- mae(observed, pred)
+  val_rmse <- rmse(observed, pred)
   print("R2:")
   print(val_r2)
   print_division()
+  print("Syx:")
+  print(val_syx)
+  print_division()
+  print("Perason:")
+  print(val_pearson)
+  print_division()
+  print("RMSE:")
+  print(val_rmse)
+  print_division()
+  print("MAE:")
+  print(val_mae)
+  print_division()
+}
+
+predizer_resultado <- function(treinado, teste, dataname, tipo_modelo) {
+  print_division()
+  print(paste(tipo_modelo, ":"))
+  print(treinado)
+  print_division()
+  predict_treino <- predict(treinado, teste)
+  observado <- teste[, ncol(teste)]
+  avaliacao(observado, predict_treino)
 }
 
 
+regressao_knn <- function(treino, teste, formula, dataname) {
+  # Grid com valores de K
+  tune_grid <- expand.grid(k = (1:10))
+  knn <- train(formula, data = treino, method = "knn", tuneGrid = tune_grid)
+  predizer_resultado(knn, teste, dataname, "KNN")
+}
 
-print("KNN VEICULOS:")
-classificacao_knn(veiculos, "tipo")
-print_division()
-print("KNN DIABETES")
-classificacao_knn(diabetes, "diabetes")
+regressao_rna_holdout <- function(treino, teste, formula, dataname) {
+  rna <- train(formula, data = treino, method = "nnet",
+               linout = TRUE, trace = FALSE)
+  predizer_resultado(rna, teste, dataname, "RNA Hold-out")
+}
+
+regressao_rna_cv <- function(treino, teste, formula, dataname) {
+  ctrl <- trainControl(method = "cv", number = 10, seeds = 202462)
+  rna <- train(formula, data = treino, method = "nnet",
+               linout = TRUE, trace = FALSE, trControl = ctrl)
+  predizer_resultado(rna, teste, dataname, "RNA Cross Validation")
+}
+
+regressao_todos <- function(data, target_col, dataname) {
+  # Divisao 80:20
+  indices <- createDataPartition(data[, ncol(data)], p=0.80, list=FALSE)# nolint
+  treino <- data[indices, ]
+  teste <- data[-indices, ]
+
+  # Formula dinamica baseada no nome da coluna pelo parâmetro
+  formula <- reformulate(".", response = target_col)
+
+  print(paste("KNN ", dataname))
+  regressao_knn(treino, teste, formula, dataname)
+  print_division()
+}
+
+print("KNN ADMISSAO")
+regressao_todos(admissao, "ChanceOfAdmit", "Admissao")
+print("KNN BIOMASSA:")
+regressao_todos(biomassa, "biomassa", "Biomassa")
